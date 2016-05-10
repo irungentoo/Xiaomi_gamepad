@@ -24,7 +24,7 @@ namespace mi
             rThread.Start();
 
             Thread iThread = new Thread(() => input_thread(Device, scpBus, index));
-           // iThread.Priority = ThreadPriority.BelowNormal;
+            iThread.Priority = ThreadPriority.Highest;
             iThread.Start();
         }
 
@@ -147,7 +147,6 @@ namespace mi
                     //Console.WriteLine((DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond));
                     byte[] outputReport = new byte[8];
                     scpBus.Report(index, controller.GetReport(), outputReport);
-
                     if (outputReport[1] == 0x08)
                     {
                         byte bigMotor = outputReport[3];
