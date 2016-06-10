@@ -46,7 +46,7 @@ namespace mi
                 {
                     rumble_mutex.ReleaseMutex();
                 }
-                Thread.Sleep(10);
+                Thread.Sleep(20);
             }
         }
 
@@ -56,6 +56,7 @@ namespace mi
             X360Controller controller = new X360Controller();
             int timeout = 30;
             long last_changed = 0;
+            long last_mi_button = 0;
             while (true)
             {
                 HidDeviceData data = Device.Read(timeout);
@@ -65,7 +66,6 @@ namespace mi
                 {
                     //Console.WriteLine(Program.ByteArrayToHexString(currentState));
                     X360Buttons Buttons = X360Buttons.None;
-                    controller.Buttons = X360Buttons.None;
                     if ((currentState[1] & 1) != 0) Buttons |= X360Buttons.A;
                     if ((currentState[1] & 2) != 0) Buttons |= X360Buttons.B;
                     if ((currentState[1] & 8) != 0) Buttons |= X360Buttons.X;
@@ -86,7 +86,16 @@ namespace mi
 
                     if ((currentState[2] & 8) != 0) Buttons |= X360Buttons.Start;
                     if ((currentState[2] & 4) != 0) Buttons |= X360Buttons.Back;
-                    if ((currentState[20] & 1) != 0) Buttons |= X360Buttons.Logo;
+
+
+
+                    if ((currentState[20] & 1) != 0)
+                    {
+                        last_mi_button = (DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond);
+                        Buttons |= X360Buttons.Logo;
+                    }
+                    if (last_mi_button != 0) Buttons |= X360Buttons.Logo;
+
 
                     if (controller.Buttons != Buttons)
                     {
@@ -147,6 +156,7 @@ namespace mi
                     //Console.WriteLine((DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond));
                     byte[] outputReport = new byte[8];
                     scpBus.Report(index, controller.GetReport(), outputReport);
+
                     if (outputReport[1] == 0x08)
                     {
                         byte bigMotor = outputReport[3];
@@ -158,6 +168,15 @@ namespace mi
                             Vibration[2] = bigMotor;
                         }
                         rumble_mutex.ReleaseMutex();
+                    }
+
+                    if (last_mi_button != 0)
+                    {
+                        if ((last_mi_button + 100) < (DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond))
+                        {
+                            last_mi_button = 0;
+                            controller.Buttons ^= X360Buttons.Logo;
+                        }
                     }
 
                     last_changed = DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond;
@@ -210,7 +229,22 @@ namespace mi
             {
                 Console.WriteLine(deviceInstance);
                 HidDevice Device = deviceInstance;
-                Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.Exclusive);
+                try {
+                    Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.Exclusive);
+                } catch (Exception exception)
+                {
+                    Console.WriteLine("Could not open gamepad in exclusive mode. Please close anything that could be using the controller\nAttempting to open it in shared mode.");
+                    Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.ShareRead | ShareMode.ShareWrite);
+                }
+
+                byte[] Vibration = { 0x20, 0x00, 0x00 };
+                if (Device.WriteFeatureData(Vibration) == false)
+                {
+                    Console.WriteLine("Could not write to gamepad (is it closed?), skipping");
+                    Device.CloseDevice();
+                    continue;
+                }
+
                 byte[] serialNumber;
                 byte[] product;
                 Device.ReadSerialNumber(out serialNumber);

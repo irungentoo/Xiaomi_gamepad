@@ -106,6 +106,10 @@ namespace HidLibrary
             }
 
             IsOpen = Handle.ToInt32() != NativeMethods.INVALID_HANDLE_VALUE;
+            if (!IsOpen)
+            {
+                throw new Exception("Error opening HID device.");
+            }
         }
 
 
@@ -123,7 +127,7 @@ namespace HidLibrary
 
         public HidDeviceData Read(int timeout)
         {
-                if (IsOpen == false) OpenDevice(_deviceReadMode, _deviceWriteMode, _deviceShareMode);
+                if (IsOpen == false) return new HidDeviceData(HidDeviceData.ReadStatus.ReadError);
                 try
                 {
                     return ReadData(timeout);
