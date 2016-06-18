@@ -62,7 +62,7 @@ namespace mi
                 HidDeviceData data = Device.Read(timeout);
                 var currentState = data.Data;
                 bool changed = false;
-                if (data.Status == HidDeviceData.ReadStatus.Success && currentState.Length >= 21)
+                if (data.Status == HidDeviceData.ReadStatus.Success && currentState.Length >= 21 && currentState[0] == 4)
                 {
                     //Console.WriteLine(Program.ByteArrayToHexString(currentState));
                     X360Buttons Buttons = X360Buttons.None;
