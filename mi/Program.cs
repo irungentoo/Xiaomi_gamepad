@@ -20,7 +20,7 @@ namespace mi
             Device.WriteFeatureData(Vibration);
 
             Thread rThread = new Thread(() => rumble_thread(Device));
-           // rThread.Priority = ThreadPriority.BelowNormal;
+            // rThread.Priority = ThreadPriority.BelowNormal; 
             rThread.Start();
 
             Thread iThread = new Thread(() => input_thread(Device, scpBus, index));
@@ -229,12 +229,18 @@ namespace mi
             {
                 Console.WriteLine(deviceInstance);
                 HidDevice Device = deviceInstance;
-                try {
-                    Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.Exclusive);
-                } catch (Exception exception)
+                try
                 {
-                    Console.WriteLine("Could not open gamepad in exclusive mode. Please close anything that could be using the controller\nAttempting to open it in shared mode.");
-                    Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.ShareRead | ShareMode.ShareWrite);
+                    Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.Exclusive);
+                }
+                catch
+                {
+                    Console.WriteLine("Could not open gamepad in exclusive mode. Try re-enable device.");
+                    var instanceId = devicePathToInstanceId(deviceInstance.DevicePath);
+                    if (TryReEnableDevice(instanceId))
+                        Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.Exclusive);
+                    else
+                        Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.ShareRead | ShareMode.ShareWrite);
                 }
 
                 byte[] Vibration = { 0x20, 0x00, 0x00 };
@@ -253,7 +259,7 @@ namespace mi
 
                 gamepads[index - 1] = new Xiaomi_gamepad(Device, scpBus, index);
                 ++index;
-                
+
                 if (index >= 5)
                 {
                     break;
@@ -266,6 +272,84 @@ namespace mi
             {
                 Thread.Sleep(1000);
             }
+        }
+
+        private static bool TryReEnableDevice(string deviceInstanceId)
+        {
+            try
+            {
+                bool success;
+                Guid hidGuid = new Guid();
+                HidLibrary.NativeMethods.HidD_GetHidGuid(ref hidGuid);
+                IntPtr deviceInfoSet = HidLibrary.NativeMethods.SetupDiGetClassDevs(ref hidGuid, deviceInstanceId, 0, HidLibrary.NativeMethods.DIGCF_PRESENT | HidLibrary.NativeMethods.DIGCF_DEVICEINTERFACE);
+                HidLibrary.NativeMethods.SP_DEVINFO_DATA deviceInfoData = new HidLibrary.NativeMethods.SP_DEVINFO_DATA();
+                deviceInfoData.cbSize = Marshal.SizeOf(deviceInfoData);
+                success = HidLibrary.NativeMethods.SetupDiEnumDeviceInfo(deviceInfoSet, 0, ref deviceInfoData);
+                if (!success)
+                {
+                    Console.WriteLine("Error getting device info data, error code = " + Marshal.GetLastWin32Error());
+                }
+                success = HidLibrary.NativeMethods.SetupDiEnumDeviceInfo(deviceInfoSet, 1, ref deviceInfoData); // Checks that we have a unique device
+                if (success)
+                {
+                    Console.WriteLine("Can't find unique device");
+                }
+
+                HidLibrary.NativeMethods.SP_PROPCHANGE_PARAMS propChangeParams = new HidLibrary.NativeMethods.SP_PROPCHANGE_PARAMS();
+                propChangeParams.classInstallHeader.cbSize = Marshal.SizeOf(propChangeParams.classInstallHeader);
+                propChangeParams.classInstallHeader.installFunction = HidLibrary.NativeMethods.DIF_PROPERTYCHANGE;
+                propChangeParams.stateChange = HidLibrary.NativeMethods.DICS_DISABLE;
+                propChangeParams.scope = HidLibrary.NativeMethods.DICS_FLAG_GLOBAL;
+                propChangeParams.hwProfile = 0;
+                success = HidLibrary.NativeMethods.SetupDiSetClassInstallParams(deviceInfoSet, ref deviceInfoData, ref propChangeParams, Marshal.SizeOf(propChangeParams));
+                if (!success)
+                {
+                    Console.WriteLine("Error setting class install params, error code = " + Marshal.GetLastWin32Error());
+                    return false;
+                }
+                success = HidLibrary.NativeMethods.SetupDiCallClassInstaller(HidLibrary.NativeMethods.DIF_PROPERTYCHANGE, deviceInfoSet, ref deviceInfoData);
+                if (!success)
+                {
+                    Console.WriteLine("Error disabling device, error code = " + Marshal.GetLastWin32Error());
+                    return false;
+
+                }
+                propChangeParams.stateChange = HidLibrary.NativeMethods.DICS_ENABLE;
+                success = HidLibrary.NativeMethods.SetupDiSetClassInstallParams(deviceInfoSet, ref deviceInfoData, ref propChangeParams, Marshal.SizeOf(propChangeParams));
+                if (!success)
+                {
+                    Console.WriteLine("Error setting class install params, error code = " + Marshal.GetLastWin32Error());
+                    return false;
+                }
+                success = HidLibrary.NativeMethods.SetupDiCallClassInstaller(HidLibrary.NativeMethods.DIF_PROPERTYCHANGE, deviceInfoSet, ref deviceInfoData);
+                if (!success)
+                {
+                    Console.WriteLine("Error enabling device, error code = " + Marshal.GetLastWin32Error());
+                    return false;
+                }
+
+                HidLibrary.NativeMethods.SetupDiDestroyDeviceInfoList(deviceInfoSet);
+
+                return true;
+            }
+            catch
+            {
+                Console.WriteLine("Can't reenable device");
+                return false;
+            }
+        }
+
+        private static string devicePathToInstanceId(string devicePath)
+        {
+            string deviceInstanceId = devicePath;
+            deviceInstanceId = deviceInstanceId.Remove(0, deviceInstanceId.LastIndexOf('\\') + 1);
+            deviceInstanceId = deviceInstanceId.Remove(deviceInstanceId.LastIndexOf('{'));
+            deviceInstanceId = deviceInstanceId.Replace('#', '\\');
+            if (deviceInstanceId.EndsWith("\\"))
+            {
+                deviceInstanceId = deviceInstanceId.Remove(deviceInstanceId.Length - 1);
+            }
+            return deviceInstanceId;
         }
     }
 }
