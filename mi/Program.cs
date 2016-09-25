@@ -238,9 +238,23 @@ namespace mi
                     Console.WriteLine("Could not open gamepad in exclusive mode. Try re-enable device.");
                     var instanceId = devicePathToInstanceId(deviceInstance.DevicePath);
                     if (TryReEnableDevice(instanceId))
-                        Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.Exclusive);
+                    {
+                        try
+                        {
+                            Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.Exclusive);
+                            Console.WriteLine("Opened in exclusive mode.");
+                        }
+                        catch
+                        {
+                            Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.ShareRead | ShareMode.ShareWrite);
+                            Console.WriteLine("Opened in shared mode.");
+                        }
+                    }
                     else
+                    {
                         Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.ShareRead | ShareMode.ShareWrite);
+                        Console.WriteLine("Opened in shared mode.");
+                    }
                 }
 
                 byte[] Vibration = { 0x20, 0x00, 0x00 };
