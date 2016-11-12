@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("mi")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyDescription("Adds a virtual xbox360 controller controlled by the mi controller")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("mi")]

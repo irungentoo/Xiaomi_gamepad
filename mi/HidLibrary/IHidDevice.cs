@@ -3,97 +3,76 @@ using System.Threading.Tasks;
 
 namespace HidLibrary
 {
-    public delegate void InsertedEventHandler();
-    public delegate void RemovedEventHandler();
+	public interface IHidDevice : IDisposable
+	{
+		event InsertedEventHandler Inserted;
+		event RemovedEventHandler Removed;
 
-    public enum DeviceMode
-    {
-        NonOverlapped = 0,
-        Overlapped = 1
-    }
+		IntPtr Handle { get; }
+		bool IsOpen { get; }
+		bool IsConnected { get; }
+		string Description { get; }
+		HidDeviceCapabilities Capabilities { get; }
+		HidDeviceAttributes Attributes { get; }
+		string DevicePath { get; }
 
-    [Flags]
-    public enum ShareMode
-    {
-        Exclusive = 0,
-        ShareRead = NativeMethods.FILE_SHARE_READ,
-        ShareWrite = NativeMethods.FILE_SHARE_WRITE
-    }
+		bool MonitorDeviceEvents { get; set; }
 
-    public delegate void ReadCallback(HidDeviceData data);
-    public delegate void ReadReportCallback(HidReport report);
-    public delegate void WriteCallback(bool success);
+		void OpenDevice();
 
-    public interface IHidDevice : IDisposable
-    {
-        event InsertedEventHandler Inserted;
-        event RemovedEventHandler Removed;
+		void OpenDevice(DeviceMode readMode, DeviceMode writeMode, ShareMode shareMode);
 
-        IntPtr Handle { get; }
-        bool IsOpen { get; }
-        bool IsConnected { get; }
-        string Description { get; }
-        HidDeviceCapabilities Capabilities { get; }
-        HidDeviceAttributes Attributes { get;  }
-        string DevicePath { get; }
+		void CloseDevice();
 
-        bool MonitorDeviceEvents { get; set; }
+		HidDeviceData Read();
 
-        void OpenDevice();
+		void Read(ReadCallback callback);
 
-        void OpenDevice(DeviceMode readMode, DeviceMode writeMode, ShareMode shareMode);
-        
-        void CloseDevice();
+		void Read(ReadCallback callback, int timeout);
 
-        HidDeviceData Read();
+		Task<HidDeviceData> ReadAsync(int timeout = 0);
 
-        void Read(ReadCallback callback);
+		HidDeviceData Read(int timeout);
 
-        void Read(ReadCallback callback, int timeout);
+		void ReadReport(ReadReportCallback callback);
 
-        Task<HidDeviceData> ReadAsync(int timeout = 0);
+		void ReadReport(ReadReportCallback callback, int timeout);
 
-        HidDeviceData Read(int timeout);
+		Task<HidReport> ReadReportAsync(int timeout = 0);
 
-        void ReadReport(ReadReportCallback callback);
+		HidReport ReadReport(int timeout);
+		HidReport ReadReport();
 
-        void ReadReport(ReadReportCallback callback, int timeout);
+		bool ReadFeatureData(out byte[] data, byte reportId = 0);
 
-        Task<HidReport> ReadReportAsync(int timeout = 0);
+		bool ReadProduct(out byte[] data);
 
-        HidReport ReadReport(int timeout);
-        HidReport ReadReport();
+		bool ReadManufacturer(out byte[] data);
 
-        bool ReadFeatureData(out byte[] data, byte reportId = 0);
+		bool ReadSerialNumber(out byte[] data);
 
-        bool ReadProduct(out byte[] data);
+		void Write(byte[] data, WriteCallback callback);
 
-        bool ReadManufacturer(out byte[] data);
+		bool Write(byte[] data);
 
-        bool ReadSerialNumber(out byte[] data);
+		bool Write(byte[] data, int timeout);
 
-        void Write(byte[] data, WriteCallback callback);
+		void Write(byte[] data, WriteCallback callback, int timeout);
 
-        bool Write(byte[] data);
+		Task<bool> WriteAsync(byte[] data, int timeout = 0);
 
-        bool Write(byte[] data, int timeout);
+		void WriteReport(HidReport report, WriteCallback callback);
 
-        void Write(byte[] data, WriteCallback callback, int timeout);
+		bool WriteReport(HidReport report);
 
-        Task<bool> WriteAsync(byte[] data, int timeout = 0);
+		bool WriteReport(HidReport report, int timeout);
 
-        void WriteReport(HidReport report, WriteCallback callback);
+		void WriteReport(HidReport report, WriteCallback callback, int timeout);
 
-        bool WriteReport(HidReport report);
+		Task<bool> WriteReportAsync(HidReport report, int timeout = 0);
 
-        bool WriteReport(HidReport report, int timeout);
+		HidReport CreateReport();
 
-        void WriteReport(HidReport report, WriteCallback callback, int timeout);
-
-        Task<bool> WriteReportAsync(HidReport report, int timeout = 0);
-
-        HidReport CreateReport();
-
-        bool WriteFeatureData(byte[] data);
-    }
+		bool WriteFeatureData(byte[] data);
+	}
 }
