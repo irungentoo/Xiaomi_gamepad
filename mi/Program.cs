@@ -50,66 +50,8 @@ namespace mi
 			SetConsoleCtrlHandler(handler, true);
 
 			Thread.Sleep(400);
-
-			Xiaomi_gamepad[] gamepads = new Xiaomi_gamepad[4];
-			int index = 1;
-			var compatibleDevices = HidDevices.Enumerate(0x2717, 0x3144).ToList();
-			foreach (var deviceInstance in compatibleDevices)
-			{
-				Console.WriteLine(deviceInstance);
-				HidDevice Device = deviceInstance;
-				try
-				{
-					Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.Exclusive);
-				}
-				catch
-				{
-					Console.WriteLine("Could not open gamepad in exclusive mode. Try reconnecting the device.");
-					var instanceId = devicePathToInstanceId(deviceInstance.DevicePath);
-					if (TryReEnableDevice(instanceId))
-					{
-						try
-						{
-							Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.Exclusive);
-							Console.WriteLine("Opened in exclusive mode.");
-						}
-						catch
-						{
-							Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.ShareRead | ShareMode.ShareWrite);
-							Console.WriteLine("Opened in shared mode.");
-						}
-					}
-					else
-					{
-						Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.ShareRead | ShareMode.ShareWrite);
-						Console.WriteLine("Opened in shared mode.");
-					}
-				}
-
-				byte[] Vibration = { 0x20, 0x00, 0x00 };
-				if (Device.WriteFeatureData(Vibration) == false)
-				{
-					Console.WriteLine("Could not write to gamepad (is it closed?), skipping");
-					Device.CloseDevice();
-					continue;
-				}
-
-				byte[] serialNumber;
-				byte[] product;
-				Device.ReadSerialNumber(out serialNumber);
-				Device.ReadProduct(out product);
-
-
-				gamepads[index - 1] = new Xiaomi_gamepad(Device, scpBus, index);
-				++index;
-
-				if (index >= 5)
-				{
-					break;
-				}
-			}
-
-			Console.WriteLine("{0} controllers connected", index - 1);
+			var controllersManager = new Thread(() => ManageControllers(scpBus));
+			controllersManager.Start();
 
 
 			Application.EnableVisualStyles();
@@ -119,12 +61,9 @@ namespace mi
 
 			try
 			{
-				// Show the system tray icon.
 				using (var pi = new ProcessIcon())
 				{
 					pi.Display();
-
-					// Make sure the application runs!
 					Application.Run();
 				}
 			}
@@ -136,18 +75,89 @@ namespace mi
 			scpBus.UnplugAll();
 		}
 
+		private static void ManageControllers(ScpBus scpBus)
+		{
+			var nrConnected = 0;
+			while (true)
+			{
+				var compatibleDevices = HidDevices.Enumerate(0x2717, 0x3144).ToList();
+				var existingDevices = Gamepads.Select(g => g.Device).ToList();
+				var newDevices = compatibleDevices.Where(d => !existingDevices.Contains(d));
+				foreach (var deviceInstance in newDevices)
+				{
+					Console.WriteLine(deviceInstance);
+					var device = deviceInstance;
+					try
+					{
+						device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.Exclusive);
+					}
+					catch
+					{
+						Console.WriteLine("Could not open gamepad in exclusive mode. Try reconnecting the device.");
+						var instanceId = devicePathToInstanceId(deviceInstance.DevicePath);
+						if (TryReEnableDevice(instanceId))
+						{
+							try
+							{
+								device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.Exclusive);
+								Console.WriteLine("Opened in exclusive mode.");
+							}
+							catch
+							{
+								device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.ShareRead | ShareMode.ShareWrite);
+								Console.WriteLine("Opened in shared mode.");
+							}
+						}
+						else
+						{
+							device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.ShareRead | ShareMode.ShareWrite);
+							Console.WriteLine("Opened in shared mode.");
+						}
+					}
+
+					byte[] vibration = { 0x20, 0x00, 0x00 };
+					if (device.WriteFeatureData(vibration) == false)
+					{
+						Console.WriteLine("Could not write to gamepad (is it closed?), skipping");
+						device.CloseDevice();
+						continue;
+					}
+
+					byte[] serialNumber;
+					byte[] product;
+					device.ReadSerialNumber(out serialNumber);
+					device.ReadProduct(out product);
+
+
+					Gamepads.Add(new Xiaomi_gamepad(device, scpBus, Gamepads.Count + 1));
+				}
+				if (Gamepads.Count != nrConnected)
+				{
+					Console.WriteLine("{0} controllers connected", Gamepads.Count);
+				}
+				nrConnected = Gamepads.Count;
+				if (nrConnected == 4)
+				{
+					Thread.Sleep(10000);
+					continue;
+				}
+				Thread.Sleep(5000);
+			}
+		}
+
+		public static List<Xiaomi_gamepad> Gamepads { get; set; } = new List<Xiaomi_gamepad>();
+
 		private static bool TryReEnableDevice(string deviceInstanceId)
 		{
 			try
 			{
-				bool success;
 				Guid hidGuid = new Guid();
 				HidLibrary.NativeMethods.HidD_GetHidGuid(ref hidGuid);
 				IntPtr deviceInfoSet = HidLibrary.NativeMethods.SetupDiGetClassDevs(ref hidGuid, deviceInstanceId, 0,
 					HidLibrary.NativeMethods.DIGCF_PRESENT | HidLibrary.NativeMethods.DIGCF_DEVICEINTERFACE);
 				HidLibrary.NativeMethods.SP_DEVINFO_DATA deviceInfoData = new HidLibrary.NativeMethods.SP_DEVINFO_DATA();
 				deviceInfoData.cbSize = Marshal.SizeOf(deviceInfoData);
-				success = HidLibrary.NativeMethods.SetupDiEnumDeviceInfo(deviceInfoSet, 0, ref deviceInfoData);
+				var success = HidLibrary.NativeMethods.SetupDiEnumDeviceInfo(deviceInfoSet, 0, ref deviceInfoData);
 				if (!success)
 				{
 					Console.WriteLine("Error getting device info data, error code = " + Marshal.GetLastWin32Error());
@@ -202,7 +212,7 @@ namespace mi
 			}
 			catch
 			{
-				Console.WriteLine("Can't reenable device");
+				Console.WriteLine("Can't re-enable device");
 				return false;
 			}
 		}

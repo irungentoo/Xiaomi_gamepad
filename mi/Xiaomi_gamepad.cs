@@ -7,12 +7,14 @@ namespace mi
 {
 	public class Xiaomi_gamepad
 	{
+		public HidDevice Device { get; set; }
 		private byte[] Vibration = { 0x20, 0x00, 0x00 };
 		private Mutex rumble_mutex = new Mutex();
 		//private byte[] enableAccelerometer = { 0x31, 0x01, 0x08 };
 
-		public Xiaomi_gamepad(HidDevice Device, ScpBus scpBus, int index)
+		public Xiaomi_gamepad(HidDevice device, ScpBus scpBus, int index)
 		{
+			Device = device;
 			Device.WriteFeatureData(Vibration);
 
 			Thread rThread = new Thread(() => rumble_thread(Device));
