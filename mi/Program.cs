@@ -58,21 +58,32 @@ namespace mi
 			Application.SetCompatibleTextRenderingDefault(false);
 			var ni = new NotifyIcon();
 
-
 			try
 			{
-				using (var pi = new ProcessIcon())
+				try
 				{
-					pi.Display();
-					Application.Run();
+					using (var pi = new ProcessIcon())
+					{
+						pi.Display();
+						Application.Run();
+					}
+				}
+				catch (Exception ex)
+				{
+					MessageBox.Show(ex.Message, "Program Terminated Unexpectedly",
+						MessageBoxButtons.OK, MessageBoxIcon.Error);
+				}
+				controllersManager.Abort();
+				scpBus.UnplugAll();
+				foreach (var device in Gamepads.Select(g => g.Device))
+				{
+					device.CloseDevice();
 				}
 			}
-			catch (Exception ex)
+			finally
 			{
-				MessageBox.Show(ex.Message, "Program Terminated Unexpectedly",
-						MessageBoxButtons.OK, MessageBoxIcon.Error);
+				Environment.Exit(0);
 			}
-			scpBus.UnplugAll();
 		}
 
 		private static void ManageControllers(ScpBus scpBus)
