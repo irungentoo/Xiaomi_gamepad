@@ -38,10 +38,13 @@ namespace mi
 			return string.Join(string.Empty, Array.ConvertAll(bytes, b => b.ToString("X2")));
 		}
 
+		static Mutex singleInstanceMutex = new Mutex(true, "{298c40ea-b004-4a7f-9910-d3bf3591b18b}");
 
 		[STAThreadAttribute]
 		static void Main(string[] args)
 		{
+			if (!IsSingleInstance()) Environment.Exit(0);
+			NIcon = new NotifyIcon();
 			ScpBus scpBus = new ScpBus();
 			scpBus.UnplugAll();
 			global_scpBus = scpBus;
@@ -51,12 +54,10 @@ namespace mi
 
 			Thread.Sleep(400);
 			var controllersManager = new Thread(() => ManageControllers(scpBus));
-			controllersManager.Start();
 
 
 			Application.EnableVisualStyles();
 			Application.SetCompatibleTextRenderingDefault(false);
-			var ni = new NotifyIcon();
 
 			try
 			{
@@ -65,6 +66,7 @@ namespace mi
 					using (var pi = new ProcessIcon())
 					{
 						pi.Display();
+						controllersManager.Start();
 						Application.Run();
 					}
 				}
@@ -79,10 +81,26 @@ namespace mi
 				{
 					device.CloseDevice();
 				}
+				singleInstanceMutex.ReleaseMutex();
 			}
 			finally
 			{
 				Environment.Exit(0);
+			}
+		}
+
+		public static NotifyIcon NIcon { get; set; }
+
+		private static bool IsSingleInstance()
+		{
+			if (singleInstanceMutex.WaitOne(TimeSpan.Zero, true))
+			{
+				return true;
+			}
+			else
+			{
+				MessageBox.Show("Another copy is already running");
+				return false;
 			}
 		}
 
@@ -96,7 +114,6 @@ namespace mi
 				var newDevices = compatibleDevices.Where(d => !existingDevices.Contains(d));
 				foreach (var deviceInstance in newDevices)
 				{
-					Console.WriteLine(deviceInstance);
 					var device = deviceInstance;
 					try
 					{
@@ -104,32 +121,32 @@ namespace mi
 					}
 					catch
 					{
-						Console.WriteLine("Could not open gamepad in exclusive mode. Try reconnecting the device.");
+						InformUser("Could not open gamepad in exclusive mode. Try reconnecting the device.");
 						var instanceId = devicePathToInstanceId(deviceInstance.DevicePath);
 						if (TryReEnableDevice(instanceId))
 						{
 							try
 							{
 								device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.Exclusive);
-								Console.WriteLine("Opened in exclusive mode.");
+								//InformUser("Opened in exclusive mode.");
 							}
 							catch
 							{
 								device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.ShareRead | ShareMode.ShareWrite);
-								Console.WriteLine("Opened in shared mode.");
+								//InformUser("Opened in shared mode.");
 							}
 						}
 						else
 						{
 							device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.ShareRead | ShareMode.ShareWrite);
-							Console.WriteLine("Opened in shared mode.");
+							//InformUser("Opened in shared mode.");
 						}
 					}
 
 					byte[] vibration = { 0x20, 0x00, 0x00 };
 					if (device.WriteFeatureData(vibration) == false)
 					{
-						Console.WriteLine("Could not write to gamepad (is it closed?), skipping");
+						InformUser("Could not write to gamepad (is it closed?), skipping");
 						device.CloseDevice();
 						continue;
 					}
@@ -144,7 +161,7 @@ namespace mi
 				}
 				if (Gamepads.Count != nrConnected)
 				{
-					Console.WriteLine("{0} controllers connected", Gamepads.Count);
+					InformUser($"{Gamepads.Count} controllers connected");
 				}
 				nrConnected = Gamepads.Count;
 				if (nrConnected == 4)
@@ -154,6 +171,41 @@ namespace mi
 				}
 				Thread.Sleep(5000);
 			}
+		}
+
+		private static void InformUser(string text)
+		{
+			NIcon.Text = "Export Datatable Utlity";
+			NIcon.Visible = true;
+			NIcon.BalloonTipTitle = "Mi controller";
+			NIcon.BalloonTipText = text;
+			NIcon.ShowBalloonTip(100);
+			//var content = new ToastContent()
+			//{
+			//	Visual = new ToastVisual
+			//	{
+			//		BindingGeneric = new ToastBindingGeneric()
+			//		{
+			//			AppLogoOverride = new ToastGenericAppLogo
+			//			{
+			//				HintCrop = ToastGenericAppLogoCrop.Circle,
+			//				Source = "http://messageme.com/lei/profile.jpg"
+			//			},
+			//			Children =
+			//			{
+			//					new AdaptiveText {Text = text },
+			//			},
+			//			Attribution = new ToastGenericAttributionText
+			//			{
+			//				Text = "Alert"
+			//			},
+			//		}
+			//	}
+			//};
+			//var toast = new ToastNotification(content.GetContent());
+
+			//// Display toast
+			//ToastNotificationManager.CreateToastNotifier().Show(toast);
 		}
 
 		public static List<Xiaomi_gamepad> Gamepads { get; set; } = new List<Xiaomi_gamepad>();
@@ -171,13 +223,13 @@ namespace mi
 				var success = HidLibrary.NativeMethods.SetupDiEnumDeviceInfo(deviceInfoSet, 0, ref deviceInfoData);
 				if (!success)
 				{
-					Console.WriteLine("Error getting device info data, error code = " + Marshal.GetLastWin32Error());
+					InformUser("Error getting device info data, error code = " + Marshal.GetLastWin32Error());
 				}
 				success = HidLibrary.NativeMethods.SetupDiEnumDeviceInfo(deviceInfoSet, 1, ref deviceInfoData);
 				// Checks that we have a unique device
 				if (success)
 				{
-					Console.WriteLine("Can't find unique device");
+					InformUser("Can't find unique device");
 				}
 
 				HidLibrary.NativeMethods.SP_PROPCHANGE_PARAMS propChangeParams = new HidLibrary.NativeMethods.SP_PROPCHANGE_PARAMS();
@@ -190,14 +242,14 @@ namespace mi
 					ref propChangeParams, Marshal.SizeOf(propChangeParams));
 				if (!success)
 				{
-					Console.WriteLine("Error setting class install params, error code = " + Marshal.GetLastWin32Error());
+					InformUser("Error setting class install params, error code = " + Marshal.GetLastWin32Error());
 					return false;
 				}
 				success = HidLibrary.NativeMethods.SetupDiCallClassInstaller(HidLibrary.NativeMethods.DIF_PROPERTYCHANGE,
 					deviceInfoSet, ref deviceInfoData);
 				if (!success)
 				{
-					Console.WriteLine("Error disabling device, error code = " + Marshal.GetLastWin32Error());
+					InformUser("Error disabling device, error code = " + Marshal.GetLastWin32Error());
 					return false;
 
 				}
@@ -206,14 +258,14 @@ namespace mi
 					ref propChangeParams, Marshal.SizeOf(propChangeParams));
 				if (!success)
 				{
-					Console.WriteLine("Error setting class install params, error code = " + Marshal.GetLastWin32Error());
+					InformUser("Error setting class install params, error code = " + Marshal.GetLastWin32Error());
 					return false;
 				}
 				success = HidLibrary.NativeMethods.SetupDiCallClassInstaller(HidLibrary.NativeMethods.DIF_PROPERTYCHANGE,
 					deviceInfoSet, ref deviceInfoData);
 				if (!success)
 				{
-					Console.WriteLine("Error enabling device, error code = " + Marshal.GetLastWin32Error());
+					InformUser("Error enabling device, error code = " + Marshal.GetLastWin32Error());
 					return false;
 				}
 
@@ -223,7 +275,7 @@ namespace mi
 			}
 			catch
 			{
-				Console.WriteLine("Can't re-enable device");
+				InformUser("Can't re-enable device");
 				return false;
 			}
 		}
