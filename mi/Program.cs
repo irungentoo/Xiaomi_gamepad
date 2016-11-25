@@ -104,6 +104,9 @@ namespace mi
                     }
 
                     short LeftStickX = (short)((Math.Max(-127.0, currentState[5] - 128) / 127) * 32767);
+                    if (LeftStickX == -32767)
+                        LeftStickX = -32768;
+
                     if (LeftStickX != controller.LeftStickX)
                     {
                         changed = true;
@@ -111,6 +114,9 @@ namespace mi
                     }
 
                     short LeftStickY = (short)((Math.Max(-127.0, currentState[6] - 128) / 127) * -32767);
+                    if (LeftStickY == -32767)
+                        LeftStickY = -32768;
+
                     if (LeftStickY != controller.LeftStickY)
                     {
                         changed = true;
@@ -118,6 +124,9 @@ namespace mi
                     }
 
                     short RightStickX = (short)((Math.Max(-127.0, currentState[7] - 128) / 127) * 32767);
+                    if (RightStickX == -32767)
+                        RightStickX = -32768;
+
                     if (RightStickX != controller.RightStickX)
                     {
                         changed = true;
@@ -125,6 +134,9 @@ namespace mi
                     }
 
                     short RightStickY = (short)((Math.Max(-127.0, currentState[8] - 128) / 127) * -32767);
+                    if (RightStickY == -32767)
+                        RightStickY = -32768;
+
                     if (RightStickY != controller.RightStickY)
                     {
                         changed = true;
