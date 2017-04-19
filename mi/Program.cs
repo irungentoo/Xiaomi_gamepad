@@ -111,7 +111,7 @@ namespace mi
 			{
 				var compatibleDevices = HidDevices.Enumerate(0x2717, 0x3144).ToList();
 				var existingDevices = Gamepads.Select(g => g.Device).ToList();
-				var newDevices = compatibleDevices.Where(d => !existingDevices.Contains(d));
+				var newDevices = compatibleDevices.Where(d => !existingDevices.Select(e => e.DevicePath).Contains(d.DevicePath));
 				foreach (var deviceInstance in newDevices)
 				{
 					var device = deviceInstance;
