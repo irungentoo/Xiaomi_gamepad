@@ -112,6 +112,14 @@ namespace mi
 				var compatibleDevices = HidDevices.Enumerate(0x2717, 0x3144).ToList();
 				var existingDevices = Gamepads.Select(g => g.Device).ToList();
 				var newDevices = compatibleDevices.Where(d => !existingDevices.Select(e => e.DevicePath).Contains(d.DevicePath));
+				foreach (var gamepad in Gamepads.ToList())
+				{
+					if (!gamepad.check_connected())
+					{
+						gamepad.unplug();
+						Gamepads.Remove(gamepad);
+					}
+				}
 				foreach (var deviceInstance in newDevices)
 				{
 					var device = deviceInstance;
@@ -157,19 +165,21 @@ namespace mi
 					device.ReadProduct(out product);
 
 
-					Gamepads.Add(new Xiaomi_gamepad(device, scpBus, Gamepads.Count + 1));
+					var index = 1;
+					try
+					{
+						index = Gamepads.Select(g => g.Index).Min();
+					}
+					catch (InvalidOperationException)
+					{
+					}
+					Gamepads.Add(new Xiaomi_gamepad(device, scpBus, index));
 				}
 				if (Gamepads.Count != nrConnected)
 				{
 					InformUser($"{Gamepads.Count} controllers connected");
 				}
-				nrConnected = Gamepads.Count;
-				if (nrConnected == 4)
-				{
-					Thread.Sleep(10000);
-					continue;
-				}
-				Thread.Sleep(5000);
+				Thread.Sleep(1000);
 			}
 		}
 
