@@ -165,13 +165,11 @@ namespace mi
 					device.ReadProduct(out product);
 
 
+					var usedIndexes = Gamepads.Select(g => g.Index);
 					var index = 1;
-					try
+					while (usedIndexes.Contains(index))
 					{
-						index = Gamepads.Select(g => g.Index).Min();
-					}
-					catch (InvalidOperationException)
-					{
+						index++;
 					}
 					Gamepads.Add(new Xiaomi_gamepad(device, scpBus, index));
 				}
