@@ -8,28 +8,48 @@ namespace mi
 	public class Xiaomi_gamepad
 	{
 		public HidDevice Device { get; set; }
+		public int Index;
+		private Thread rThread, iThread;
+		private ScpBus ScpBus;
 		private byte[] Vibration = { 0x20, 0x00, 0x00 };
 		private Mutex rumble_mutex = new Mutex();
+		private bool Running = true;
 		//private byte[] enableAccelerometer = { 0x31, 0x01, 0x08 };
 
 		public Xiaomi_gamepad(HidDevice device, ScpBus scpBus, int index)
 		{
+			Index = index;
+			ScpBus = scpBus;
 			Device = device;
 			Device.WriteFeatureData(Vibration);
 
-			Thread rThread = new Thread(() => rumble_thread(Device));
+			rThread = new Thread(() => rumble_thread(Device));
 			// rThread.Priority = ThreadPriority.BelowNormal; 
 			rThread.Start();
 
-			Thread iThread = new Thread(() => input_thread(Device, scpBus, index));
+			iThread = new Thread(() => input_thread(Device, scpBus, index));
 			iThread.Priority = ThreadPriority.Highest;
 			iThread.Start();
+		}
+
+		public bool check_connected()
+		{
+			return Device.WriteFeatureData(Vibration);
+		}
+
+		public void unplug()
+		{
+			Running = false;
+			rThread.Join();
+			iThread.Join();
+			ScpBus.Unplug(Index);
+			Device.CloseDevice();
 		}
 
 		private void rumble_thread(HidDevice Device)
 		{
 			byte[] local_vibration = { 0x20, 0x00, 0x00 };
-			while (true)
+			while (Running)
 			{
 				rumble_mutex.WaitOne();
 				if (local_vibration[2] != Vibration[2] || Vibration[1] != local_vibration[1])
@@ -55,7 +75,7 @@ namespace mi
 			int timeout = 30;
 			long last_changed = 0;
 			long last_mi_button = 0;
-			while (true)
+			while (Running)
 			{
 				HidDeviceData data = Device.Read(timeout);
 				var currentState = data.Data;
