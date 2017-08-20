@@ -30,46 +30,32 @@
         {
             this.components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
-            this.ConsoleBox = new System.Windows.Forms.RichTextBox();
             this.notifyIcon1 = new System.Windows.Forms.NotifyIcon(this.components);
+            this.ContextMenu = new System.Windows.Forms.ContextMenu();
+            System.Windows.Forms.MenuItem mnuItemExit = new System.Windows.Forms.MenuItem();
+            mnuItemExit.Text = "E&xit";
+            mnuItemExit.Click += new System.EventHandler(this.mnuItemExit_Click);
+            this.ContextMenu.MenuItems.Add(mnuItemExit);
+            notifyIcon1.ContextMenu = this.ContextMenu;
             this.SuspendLayout();
-            // 
-            // ConsoleBox
-            // 
-            this.ConsoleBox.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.ConsoleBox.Location = new System.Drawing.Point(12, 12);
-            this.ConsoleBox.Name = "ConsoleBox";
-            this.ConsoleBox.Size = new System.Drawing.Size(630, 352);
-            this.ConsoleBox.TabIndex = 0;
-            this.ConsoleBox.Text = "";
             // 
             // notifyIcon1
             // 
             this.notifyIcon1.Icon = ((System.Drawing.Icon)(resources.GetObject("notifyIcon1.Icon")));
             this.notifyIcon1.Text = "MiX360 Gamepad";
             this.notifyIcon1.Visible = true;
-            this.notifyIcon1.MouseDoubleClick += new System.Windows.Forms.MouseEventHandler(this.notifyIcon1_MouseDoubleClick);
-            // 
+            
             // MainForm
-            // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(654, 376);
-            this.Controls.Add(this.ConsoleBox);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Name = "MainForm";
             this.Text = "MiX360 Gamepad";
             this.FormClosed += new System.Windows.Forms.FormClosedEventHandler(this.MainForm_FormClosed);
-            this.Resize += new System.EventHandler(this.MainForm_Resize);
+            this.Load += new System.EventHandler(this.MainForm_Load);
             this.ResumeLayout(false);
-
+            this.PerformLayout();
         }
 
         #endregion
-
-        private System.Windows.Forms.RichTextBox ConsoleBox;
         private System.Windows.Forms.NotifyIcon notifyIcon1;
     }
 }

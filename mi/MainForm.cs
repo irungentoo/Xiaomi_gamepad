@@ -3,10 +3,8 @@ using HidLibrary;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data;
 using System.Drawing;
 using System.Linq;
-using System.Text;
 using System.Windows.Forms;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -16,61 +14,92 @@ namespace mi
     public partial class MainForm : Form
     {
         private static ScpBus global_scpBus;
-
-        public void Log(string Text)
-        {
-            ConsoleBox.Text += Text + "\n";
-        }
+        private static Dictionary<String, Xiaomi_gamepad> mapped_devices;
 
         public MainForm()
         {
-           
             InitializeComponent();
-            ScpBus scpBus = new ScpBus();
-            scpBus.UnplugAll();
-            global_scpBus = scpBus;
+        }
 
-            Thread.Sleep(400);
+        protected override void WndProc(ref Message m)
+        {
+            base.WndProc(ref m);
+        }
 
-            Xiaomi_gamepad[] gamepads = new Xiaomi_gamepad[4];
-            int index = 1;
+        private void InvokeUI(Action a)
+        {
+            this.BeginInvoke(new MethodInvoker(a));
+        }
+
+        private void detectDevices()
+        {
+            Int32 lastResults = 0;
+            while (true)
+            {
+                Int32 result = searchDevice();
+                if (result > 0)
+                {
+                    if (lastResults != result)
+                    {
+                        String text = result + " device(s) connected";
+                        lastResults = result;
+                        InvokeUI(() =>
+                        {
+
+                            notifyIcon1.BalloonTipTitle = "MiX360 Gamepad";
+                            notifyIcon1.BalloonTipText = text;
+                            notifyIcon1.ShowBalloonTip(500);
+                        });
+                    }
+                }
+                Thread.Sleep(5000);
+            }
+
+        }
+
+       
+        private Int32 searchDevice()
+        {
             var compatibleDevices = HidDevices.Enumerate(0x2717, 0x3144).ToList();
+            ScpBus scpBus = global_scpBus;
+            Dictionary<string, Xiaomi_gamepad> already_mapped = mapped_devices;
+            
+            //Debug.WriteLine(Device.DevicePath);
             foreach (var deviceInstance in compatibleDevices)
             {
-                Log(deviceInstance.ToString());
                 HidDevice Device = deviceInstance;
+                if (already_mapped.ContainsKey(Device.DevicePath))
+                {
+                    continue;
+                }
+                
                 try
                 {
                     Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.Exclusive);
                 }
                 catch
                 {
-                    Log("Could not open gamepad in exclusive mode. Try re-enable device.");
                     var instanceId = devicePathToInstanceId(deviceInstance.DevicePath);
                     if (TryReEnableDevice(instanceId))
                     {
                         try
                         {
                             Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.Exclusive);
-                            Log("Opened in exclusive mode.");
                         }
                         catch
                         {
                             Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.ShareRead | ShareMode.ShareWrite);
-                            Log("Opened in shared mode.");
                         }
                     }
                     else
                     {
                         Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.ShareRead | ShareMode.ShareWrite);
-                        Log("Opened in shared mode.");
                     }
                 }
 
                 byte[] Vibration = { 0x20, 0x00, 0x00 };
                 if (Device.WriteFeatureData(Vibration) == false)
                 {
-                    Log("Could not write to gamepad (is it closed?), skipping");
                     Device.CloseDevice();
                     continue;
                 }
@@ -80,17 +109,14 @@ namespace mi
                 Device.ReadSerialNumber(out serialNumber);
                 Device.ReadProduct(out product);
 
-
-                gamepads[index - 1] = new Xiaomi_gamepad(Device, scpBus, index);
-                ++index;
-
-                if (index >= 5)
-                {
-                    break;
-                }
+                Int32 index = mapped_devices.Count + 1;
+                Xiaomi_gamepad gamepad = new Xiaomi_gamepad(Device, scpBus, index);
+                mapped_devices.Add(Device.DevicePath, gamepad);
             }
-            Log(index - 1 + " controllers connected");
+
+            return mapped_devices.Count;
         }
+
 
         private static string devicePathToInstanceId(string devicePath)
         {
@@ -116,16 +142,8 @@ namespace mi
                 HidLibrary.NativeMethods.SP_DEVINFO_DATA deviceInfoData = new HidLibrary.NativeMethods.SP_DEVINFO_DATA();
                 deviceInfoData.cbSize = Marshal.SizeOf(deviceInfoData);
                 success = HidLibrary.NativeMethods.SetupDiEnumDeviceInfo(deviceInfoSet, 0, ref deviceInfoData);
-                if (!success)
-                {
-                    Log("Error getting device info data, error code = " + Marshal.GetLastWin32Error());
-                }
                 success = HidLibrary.NativeMethods.SetupDiEnumDeviceInfo(deviceInfoSet, 1, ref deviceInfoData); // Checks that we have a unique device
-                if (success)
-                {
-                    Log("Can't find unique device");
-                }
-
+               
                 HidLibrary.NativeMethods.SP_PROPCHANGE_PARAMS propChangeParams = new HidLibrary.NativeMethods.SP_PROPCHANGE_PARAMS();
                 propChangeParams.classInstallHeader.cbSize = Marshal.SizeOf(propChangeParams.classInstallHeader);
                 propChangeParams.classInstallHeader.installFunction = HidLibrary.NativeMethods.DIF_PROPERTYCHANGE;
@@ -135,13 +153,11 @@ namespace mi
                 success = HidLibrary.NativeMethods.SetupDiSetClassInstallParams(deviceInfoSet, ref deviceInfoData, ref propChangeParams, Marshal.SizeOf(propChangeParams));
                 if (!success)
                 {
-                    Log("Error setting class install params, error code = " + Marshal.GetLastWin32Error());
                     return false;
                 }
                 success = HidLibrary.NativeMethods.SetupDiCallClassInstaller(HidLibrary.NativeMethods.DIF_PROPERTYCHANGE, deviceInfoSet, ref deviceInfoData);
                 if (!success)
                 {
-                    Log("Error disabling device, error code = " + Marshal.GetLastWin32Error());
                     return false;
 
                 }
@@ -149,13 +165,11 @@ namespace mi
                 success = HidLibrary.NativeMethods.SetupDiSetClassInstallParams(deviceInfoSet, ref deviceInfoData, ref propChangeParams, Marshal.SizeOf(propChangeParams));
                 if (!success)
                 {
-                    Log("Error setting class install params, error code = " + Marshal.GetLastWin32Error());
                     return false;
                 }
                 success = HidLibrary.NativeMethods.SetupDiCallClassInstaller(HidLibrary.NativeMethods.DIF_PROPERTYCHANGE, deviceInfoSet, ref deviceInfoData);
                 if (!success)
                 {
-                    Log("Error enabling device, error code = " + Marshal.GetLastWin32Error());
                     return false;
                 }
 
@@ -165,7 +179,6 @@ namespace mi
             }
             catch
             {
-                Log("Can't reenable device");
                 return false;
             }
         }
@@ -175,20 +188,27 @@ namespace mi
             global_scpBus.UnplugAll();
         }
 
-        private void MainForm_Resize(object sender, EventArgs e)
+        private void MainForm_Load(object sender, EventArgs e)
         {
-            if (this.WindowState == FormWindowState.Minimized)
-            {
-                notifyIcon1.Visible = true;
-                this.ShowInTaskbar = false;
-            }
+            this.WindowState = System.Windows.Forms.FormWindowState.Minimized;
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedToolWindow;
+            this.ShowInTaskbar = false;
+            this.Hide();
+
+            ScpBus scpBus = new ScpBus();
+            scpBus.UnplugAll();
+            global_scpBus = scpBus;
+            mapped_devices = new Dictionary<string, Xiaomi_gamepad>();
+
+            Thread detectThread = new Thread(detectDevices);
+            detectThread.IsBackground = true;
+            detectThread.Start();
         }
 
-        private void notifyIcon1_MouseDoubleClick(object sender, MouseEventArgs e)
+        private void mnuItemExit_Click(object Sender, EventArgs e)
         {
-            this.WindowState = FormWindowState.Normal;
-            this.ShowInTaskbar = true;
-            notifyIcon1.Visible = false;
+            Application.Exit();
         }
     }
+
 }
