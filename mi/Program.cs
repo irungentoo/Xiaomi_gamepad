@@ -1,8 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Windows.Forms;
 using HidLibrary;
 using ScpDriverInterface;
 using System.Threading;
@@ -21,10 +20,12 @@ namespace mi
 
             Thread rThread = new Thread(() => rumble_thread(Device));
             // rThread.Priority = ThreadPriority.BelowNormal; 
+            rThread.IsBackground = true;
             rThread.Start();
 
             Thread iThread = new Thread(() => input_thread(Device, scpBus, index));
             iThread.Priority = ThreadPriority.Highest;
+            iThread.IsBackground = true;
             iThread.Start();
         }
 
@@ -197,185 +198,22 @@ namespace mi
         }
     }
 
-    class Program
+    static class Program
     {
-        private static ScpBus global_scpBus;
-        static bool ConsoleEventCallback(int eventType)
-        {
-            if (eventType == 2)
-            {
-                global_scpBus.UnplugAll();
-            }
-            return false;
-        }
-        static ConsoleEventDelegate handler;   // Keeps it from getting garbage collected
-                                               // Pinvoke
-        private delegate bool ConsoleEventDelegate(int eventType);
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool SetConsoleCtrlHandler(ConsoleEventDelegate callback, bool add);
-
-
-
         public static string ByteArrayToHexString(byte[] bytes)
         {
             return string.Join(string.Empty, Array.ConvertAll(bytes, b => b.ToString("X2")));
         }
 
-
-
-        static void Main(string[] args)
+        [STAThread]
+        static void Main()
         {
-            ScpBus scpBus = new ScpBus();
-            scpBus.UnplugAll();
-            global_scpBus = scpBus;
-
-            handler = new ConsoleEventDelegate(ConsoleEventCallback);
-            SetConsoleCtrlHandler(handler, true);
-
-            Thread.Sleep(400);
-
-            Xiaomi_gamepad[] gamepads = new Xiaomi_gamepad[4];
-            int index = 1;
-            var compatibleDevices = HidDevices.Enumerate(0x2717, 0x3144).ToList();
-            foreach (var deviceInstance in compatibleDevices)
-            {
-                Console.WriteLine(deviceInstance);
-                HidDevice Device = deviceInstance;
-                try
-                {
-                    Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.Exclusive);
-                }
-                catch
-                {
-                    Console.WriteLine("Could not open gamepad in exclusive mode. Try re-enable device.");
-                    var instanceId = devicePathToInstanceId(deviceInstance.DevicePath);
-                    if (TryReEnableDevice(instanceId))
-                    {
-                        try
-                        {
-                            Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.Exclusive);
-                            Console.WriteLine("Opened in exclusive mode.");
-                        }
-                        catch
-                        {
-                            Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.ShareRead | ShareMode.ShareWrite);
-                            Console.WriteLine("Opened in shared mode.");
-                        }
-                    }
-                    else
-                    {
-                        Device.OpenDevice(DeviceMode.Overlapped, DeviceMode.Overlapped, ShareMode.ShareRead | ShareMode.ShareWrite);
-                        Console.WriteLine("Opened in shared mode.");
-                    }
-                }
-
-                byte[] Vibration = { 0x20, 0x00, 0x00 };
-                if (Device.WriteFeatureData(Vibration) == false)
-                {
-                    Console.WriteLine("Could not write to gamepad (is it closed?), skipping");
-                    Device.CloseDevice();
-                    continue;
-                }
-
-                byte[] serialNumber;
-                byte[] product;
-                Device.ReadSerialNumber(out serialNumber);
-                Device.ReadProduct(out product);
-
-
-                gamepads[index - 1] = new Xiaomi_gamepad(Device, scpBus, index);
-                ++index;
-
-                if (index >= 5)
-                {
-                    break;
-                }
-            }
-
-            Console.WriteLine("{0} controllers connected", index - 1);
-
-            while (true)
-            {
-                Thread.Sleep(1000);
-            }
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            
+            Application.Run(new MainForm());
         }
 
-        private static bool TryReEnableDevice(string deviceInstanceId)
-        {
-            try
-            {
-                bool success;
-                Guid hidGuid = new Guid();
-                HidLibrary.NativeMethods.HidD_GetHidGuid(ref hidGuid);
-                IntPtr deviceInfoSet = HidLibrary.NativeMethods.SetupDiGetClassDevs(ref hidGuid, deviceInstanceId, 0, HidLibrary.NativeMethods.DIGCF_PRESENT | HidLibrary.NativeMethods.DIGCF_DEVICEINTERFACE);
-                HidLibrary.NativeMethods.SP_DEVINFO_DATA deviceInfoData = new HidLibrary.NativeMethods.SP_DEVINFO_DATA();
-                deviceInfoData.cbSize = Marshal.SizeOf(deviceInfoData);
-                success = HidLibrary.NativeMethods.SetupDiEnumDeviceInfo(deviceInfoSet, 0, ref deviceInfoData);
-                if (!success)
-                {
-                    Console.WriteLine("Error getting device info data, error code = " + Marshal.GetLastWin32Error());
-                }
-                success = HidLibrary.NativeMethods.SetupDiEnumDeviceInfo(deviceInfoSet, 1, ref deviceInfoData); // Checks that we have a unique device
-                if (success)
-                {
-                    Console.WriteLine("Can't find unique device");
-                }
-
-                HidLibrary.NativeMethods.SP_PROPCHANGE_PARAMS propChangeParams = new HidLibrary.NativeMethods.SP_PROPCHANGE_PARAMS();
-                propChangeParams.classInstallHeader.cbSize = Marshal.SizeOf(propChangeParams.classInstallHeader);
-                propChangeParams.classInstallHeader.installFunction = HidLibrary.NativeMethods.DIF_PROPERTYCHANGE;
-                propChangeParams.stateChange = HidLibrary.NativeMethods.DICS_DISABLE;
-                propChangeParams.scope = HidLibrary.NativeMethods.DICS_FLAG_GLOBAL;
-                propChangeParams.hwProfile = 0;
-                success = HidLibrary.NativeMethods.SetupDiSetClassInstallParams(deviceInfoSet, ref deviceInfoData, ref propChangeParams, Marshal.SizeOf(propChangeParams));
-                if (!success)
-                {
-                    Console.WriteLine("Error setting class install params, error code = " + Marshal.GetLastWin32Error());
-                    return false;
-                }
-                success = HidLibrary.NativeMethods.SetupDiCallClassInstaller(HidLibrary.NativeMethods.DIF_PROPERTYCHANGE, deviceInfoSet, ref deviceInfoData);
-                if (!success)
-                {
-                    Console.WriteLine("Error disabling device, error code = " + Marshal.GetLastWin32Error());
-                    return false;
-
-                }
-                propChangeParams.stateChange = HidLibrary.NativeMethods.DICS_ENABLE;
-                success = HidLibrary.NativeMethods.SetupDiSetClassInstallParams(deviceInfoSet, ref deviceInfoData, ref propChangeParams, Marshal.SizeOf(propChangeParams));
-                if (!success)
-                {
-                    Console.WriteLine("Error setting class install params, error code = " + Marshal.GetLastWin32Error());
-                    return false;
-                }
-                success = HidLibrary.NativeMethods.SetupDiCallClassInstaller(HidLibrary.NativeMethods.DIF_PROPERTYCHANGE, deviceInfoSet, ref deviceInfoData);
-                if (!success)
-                {
-                    Console.WriteLine("Error enabling device, error code = " + Marshal.GetLastWin32Error());
-                    return false;
-                }
-
-                HidLibrary.NativeMethods.SetupDiDestroyDeviceInfoList(deviceInfoSet);
-
-                return true;
-            }
-            catch
-            {
-                Console.WriteLine("Can't reenable device");
-                return false;
-            }
-        }
-
-        private static string devicePathToInstanceId(string devicePath)
-        {
-            string deviceInstanceId = devicePath;
-            deviceInstanceId = deviceInstanceId.Remove(0, deviceInstanceId.LastIndexOf('\\') + 1);
-            deviceInstanceId = deviceInstanceId.Remove(deviceInstanceId.LastIndexOf('{'));
-            deviceInstanceId = deviceInstanceId.Replace('#', '\\');
-            if (deviceInstanceId.EndsWith("\\"))
-            {
-                deviceInstanceId = deviceInstanceId.Remove(deviceInstanceId.Length - 1);
-            }
-            return deviceInstanceId;
-        }
+       
     }
 }
